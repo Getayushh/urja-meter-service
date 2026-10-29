@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Urja Meter Intelligence</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="side">
+    <div class="brand"><span class="logo">≋</span><div><b>urja</b><small>meter intelligence</small></div></div>
+    <nav>
+      <button class="nav active" data-view="overview">Meters</button>
+      <button class="nav" data-view="transformers">Transformers</button>
+    </nav>
+    <p class="side-note">Read-only view over the Urja Meter Ops portal, via this service's API. Live data only; nothing here is sample data.</p>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <span id="crumb">Workspace / Meters</span>
+      <div class="pills"><span id="apiStatus" class="pill">API: checking…</span><span id="lastLoaded" class="pill">Nothing loaded yet</span></div>
+    </header>
+    <div id="banner" class="banner" hidden></div>
+
+    <section id="view-overview" class="view">
+      <h1>Meter intelligence</h1>
+      <p class="sub">Search the network, pick a meter, then load its readings.</p>
+      <div class="search"><input id="searchInput" placeholder="Search by meter ID or serial…" maxlength="64"><button id="searchBtn" class="primary">Search</button></div>
+
+      <div class="kpis">
+        <div class="kpi"><span>Meters matching</span><b id="kTotal">—</b><small>across all pages</small></div>
+        <div class="kpi"><span>Installed</span><b id="kInstalled">—</b><small>on this page</small></div>
+        <div class="kpi"><span>Faulty or decommissioned</span><b id="kFlagged" class="warn">—</b><small>on this page</small></div>
+        <div class="kpi"><span>Latest kWh register</span><b id="kLatest">—</b><small id="kLatestSub">select a meter and load readings</small></div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Energy register</h2><p id="chartSub" class="sub">No meter selected</p></div>
+            <div class="seg" id="range">
+              <button data-h="6">6h</button><button data-h="12">12h</button><button data-h="24" class="on">24h</button><button data-h="0">All</button>
+            </div>
+          </div>
+          <button id="energyBtn" class="primary" disabled>Load energy readings</button>
+          <div id="energyState" class="state"></div>
+          <div class="stats">
+            <div><span>Cumulative kWh</span><b id="sKwh">—</b></div>
+            <div><span>Avg voltR</span><b id="sVolt">—</b></div>
+            <div><span>kWh in window</span><b id="sSpan">—</b></div>
+          </div>
+          <div class="chartbox"><svg id="chart" viewBox="0 0 800 260" preserveAspectRatio="none" role="img" aria-label="Cumulative kWh over time"></svg></div>
+          <div id="readout" class="readout">Hover the chart for a reading.</div>
+          <p class="note">kWh is a cumulative register, not consumption. Timestamps have no time zone in the portal data; shown as received.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h2 id="aTitle">Selected meter</h2><p class="sub" id="aSub">Click a row below</p></div><span id="aStatus" class="chip" hidden></span></div>
+          <dl id="aDetail" class="detail"></dl>
+          <h3>Location</h3>
+          <div id="geo" class="state">—</div>
+          <p id="hierarchy" class="note"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Meters</h2>
+        <div id="meterState" class="state"></div>
+        <div class="scroll"><table id="meterTable" hidden>
+          <thead><tr><th>Meter ID</th><th>Serial</th><th>Make</th><th>Phase</th><th>Status</th><th>Transformer</th></tr></thead><tbody></tbody>
+        </table></div>
+        <div class="pager"><button id="prevBtn">Prev</button><span id="pageInfo"></span><button id="nextBtn">Next</button></div>
+      </div>
+    </section>
+
+    <section id="view-transformers" class="view" hidden>
+      <h1>Distribution transformers</h1>
+      <p class="sub">Rated capacity only. The portal does not link transformers to meters beyond each meter's transformer code.</p>
+      <div class="card">
+        <div id="dtState" class="state"></div>
+        <div class="scroll"><table id="dtTable" hidden>
+          <thead><tr><th>Code</th><th>Name</th><th>Feeder</th><th>Capacity (kVA)</th><th>Relative size (this page)</th></tr></thead><tbody></tbody>
+        </table></div>
+        <div class="pager"><button id="dtPrev">Prev</button><span id="dtPageInfo"></span><button id="dtNext">Next</button></div>
+      </div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
