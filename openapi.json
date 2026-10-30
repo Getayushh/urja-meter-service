@@ -375,6 +375,92 @@
         }
       }
     },
+    "/api/v1/meters/{meter_id}/hierarchy": {
+      "get": {
+        "summary": "Installation type and network hierarchy for ONE meter",
+        "description": "Read from the portal's own meter page data (/meters/{id}/__data.json), which the search results lack.",
+        "operationId": "meter_hierarchy_api_v1_meters__meter_id__hierarchy_get",
+        "parameters": [
+          {
+            "name": "meter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,32}$",
+              "description": "Meter id, e.g. J100020",
+              "examples": [
+                "J100020"
+              ],
+              "title": "Meter Id"
+            },
+            "description": "Meter id, e.g. J100020"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeterProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Upstream portal is rate-limiting (see Retry-After header)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream portal failed or returned unexpected data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Upstream portal timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/distribution-transformers": {
       "get": {
         "summary": "Distribution transformers (rated capacity only)",
@@ -569,6 +655,41 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HierarchyLevel": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level"
+        ],
+        "title": "HierarchyLevel"
+      },
       "Meter": {
         "properties": {
           "meterId": {
@@ -710,6 +831,54 @@
           "page"
         ],
         "title": "MeterPage"
+      },
+      "MeterProfile": {
+        "properties": {
+          "meterId": {
+            "type": "string",
+            "title": "Meterid"
+          },
+          "installationStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installationstatus"
+          },
+          "installationType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installationtype"
+          },
+          "hierarchy": {
+            "items": {
+              "$ref": "#/components/schemas/HierarchyLevel"
+            },
+            "type": "array",
+            "title": "Hierarchy"
+          },
+          "hierarchyComplete": {
+            "type": "boolean",
+            "title": "Hierarchycomplete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meterId",
+          "hierarchy",
+          "hierarchyComplete"
+        ],
+        "title": "MeterProfile"
       },
       "Reading": {
         "properties": {

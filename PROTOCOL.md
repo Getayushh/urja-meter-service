@@ -1,6 +1,7 @@
 # PROTOCOL.md — how the Urja Meter Ops portal works
 
-Investigated on 29 Oct 2026 with browser DevTools (Network tab) plus live requests from the service in this repo.
+Investigated on 29 and 30 Oct 2026 with browser DevTools (Network tab) plus live requests from the service in this repo.
+The meter page-data findings (§3a) come from the 30 Oct 2026 investigation session; they were recorded in that session's log and are written up here, not re-run while editing this document.
 The portal has no public API. Everything below is how its own front end talks to its own back end, so it can change without notice.
 
 **Labels:** `[VERIFIED]` seen live (DevTools or our client against the real portal) · `[INFERRED]` reasoned from what was seen · `[NOT TESTED]` not checked.
@@ -38,7 +39,7 @@ All `GET`, JSON, session cookie required in the browser.
 | Energy readings | `/portal/meters/<id>/energy` | `{data:[{timestamp, kwh, kvah, voltR}, …]}` |
 | Location | `/portal/meters/<id>/geo` | `{data:{latitude, longitude}}` |
 | Transformers | `/portal/dts?page=<n>` | `{data:[{code,name,feederCode,capacityKva}], total, page, pageSize}` — `[VERIFIED]` 40 total, 20 per page, 2 pages |
-| SvelteKit page data | `/meters/<id>/__data.json?x-sveltekit-invalidated=…` | `[NOT TESTED]` body not inspected (see §6) |
+| SvelteKit page data (one meter) | `/meters/<id>/__data.json?x-sveltekit-invalidated=001` | `[VERIFIED]` hierarchy + installation type, SvelteKit "devalue" format (see §3a) |
 
 ### Search
 - `q` matching is case-insensitive: `j100234` finds `J100234`. `[VERIFIED]`
@@ -62,6 +63,33 @@ Coordinates arrive as numbers or strings; the service converts them and rejects 
 - **Page 2 works** (`DT-021` … `DT-040`). My first attempt returned page 1 twice — see §5.
 - `[VERIFIED]` All 403 meters point at a transformer that exists: no orphans, no null `dtCode`. The mapping follows the meter order and repeats every 40 meters (J100000 → DT-001, J100020 → DT-021, J100234 → DT-035).
 
+## 3a. Meter page data: installation type and network hierarchy
+The search results lack these fields, but the portal's own meter page gets them from an **internal SvelteKit route**:
+
+```
+GET /meters/<id>/__data.json?x-sveltekit-invalidated=001      (session cookie required, Cache-Control: private, no-store)
+```
+Our API exposes it as `GET /api/v1/meters/{id}/hierarchy`.
+
+**Format** `[VERIFIED]` A JSON object `{"type":"data","nodes":[…]}`. Node 0 and 1 are `skip` (layout), node 2 holds the meter. The meter node's `data` is SvelteKit's compact *devalue* format: one flat list in which objects and arrays refer to other entries **by index** instead of nesting. `app/devalue.py` turns it back into normal dicts and lists. It only handles what this portal uses; unknown tagged values are kept as `{"_tag", "_value"}`, never guessed, and a bad reference raises a clean error.
+
+**Decoded content** `[VERIFIED]`
+- `meterId`
+- `detail`: six nameplate rows, each `{parameterName, parameterValue}`
+- `hierarchy`: named levels, top of the network down: **Zone, Circle, Division, Subdivision, Sub Station, Feeder, DT**. A value holds name and code in one string, e.g. `Jaipur Zone 3 (Z-03)`; the service splits it into `name` and `code`.
+- Installation types seen in the sample: `CT Operated`, `Whole Current` (not an exhaustive list).
+- `[NOT TESTED live]` which of `hierarchy` / `detail` holds "Installation Type" and "Installation Status" was not re-checked in this review. The service reads them from the `hierarchy` object first and falls back to the `detail` rows (covered by a mocked test).
+
+**Validation sample** `[VERIFIED]` 12 meters across `J100000 … J100402`, including Installed, Faulty and Decommissioned: all had all seven levels, and the hierarchy's transformer code equalled the meter's `dtCode` from search every time. **This is 12 of 403 meters.** Complete hierarchy for every meter is not proven. The API therefore omits missing levels and sets `hierarchyComplete: false` rather than inventing them.
+
+**No bulk route** `[VERIFIED]` `/meters/__data.json?x-sveltekit-invalidated=010` returned only the logged-in user's `name` and `email`, no meter list. So hierarchy needs **one extra portal request per meter**, which is why the dashboard fetches it only for the selected meter (and the service caches it for 30 s).
+
+**Unknown meter** `[VERIFIED]` The portal answers **HTTP 200** with an `error` node (status 404 / "not found") in the body. We map that to our **404**; any other error node becomes a **502**.
+
+**Logged-out request** `[INFERRED]` SvelteKit normally answers a page-data request that needs login with `{"type":"redirect", …}` (still HTTP 200). The client treats such a body like a 401: it logs in again once and never caches it. This was **not observed live**; it is covered by a mocked test.
+
+**Why use an internal route at all?** There is no explicit hierarchy endpoint, and this is where the portal's own page gets the data. Trade-off: it is framework-internal, undocumented, and its format can change without notice. It is isolated in `get_meter_page()` (client), `devalue.py` and `normalize_meter_profile()` (service), so a change breaks one route and not the rest of the API.
+
 ## 4. Rate limiting
 `[VERIFIED]` Early on, requesting `/energy` too often returned **HTTP 429**. Actual limits are `[NOT TESTED]`. Mitigations in the client: energy is fetched only for the selected meter, on a button click; at most 3 attempts; `Retry-After` honoured (capped at 10 s) with exponential backoff otherwise; 30 s in-memory cache; a persistent 429 becomes a 429 from our API, never an empty list.
 
@@ -70,10 +98,13 @@ Coordinates arrive as numbers or strings; the service converts them and rejects 
 2. **The 403 on login from Python** was only the missing `Origin` header (SvelteKit's CSRF check); see §2.
 3. **A `?` inside a path breaks paging.** `PORTAL_DTS_PATH=/portal/dts?page=1` in `.env` made the request `…?page=1&page=2`, and the portal used the first `page`, so every page looked like page 1. Found by comparing our output with the browser's DevTools requests (response sizes 1680 vs 1692 bytes). The client now strips any query string from that setting, and a test covers it.
 4. **Static, partial data.** Readings stop at 30 Jun 2026; the number of readings varies by meter.
-5. **Detail fields missing from search results.** The portal's meter page shows an installation type (J100020: "CT Operated") and a network hierarchy (Zone → Circle → Division → Subdivision → Substation → Feeder → Transformer), but the search results contain neither, so the API returns `installationType: null` and `hierarchy: null`. We never guess them.
+5. **Detail fields missing from search results.** Installation type and the network hierarchy are in the meter's page data, not the search results (§3a). The search-based `GET /api/v1/meters` therefore still returns `installationType: null` and `hierarchy: null`; the new `/hierarchy` route fills them. We never guess them.
+6. **Page data reports errors with HTTP 200.** An unknown meter is a 200 response containing an `error` node, so the status code alone is not enough (§3a).
 
 ## 6. Not explored / next
-- `__data.json` is the likely source of the installation type and hierarchy. It is a framework-internal route, so I did not build on it without inspecting it first.
+- Hierarchy for all 403 meters: only 12 were sampled. Checking more, carefully and slowly, would be the next step.
+- A network explorer (browse Zone → … → Transformer and see its meters) is not built; with no bulk route it would need one request per meter.
+- Which object (`hierarchy` or `detail`) carries installation type was not re-checked (§3a).
 - The client's automatic re-login after a real expiry was not run end to end against the live portal (unit tests use mocks; the portal's 401 on expiry was verified separately). Rate-limit thresholds were **deliberately not probed**: it would mean hammering a server I was told to treat as read-only. What is known: 429 exists, and the client backs off using `Retry-After`.
 
 ## 7. How our API maps to the portal
@@ -83,4 +114,5 @@ Coordinates arrive as numbers or strings; the service converts them and rejects 
 | `GET /api/v1/meters/{id}` | search with `q={id}`, exact match |
 | `GET /api/v1/meters/{id}/energy` | `/portal/meters/{id}/energy` |
 | `GET /api/v1/meters/{id}/geo` | `/portal/meters/{id}/geo` |
+| `GET /api/v1/meters/{id}/hierarchy` | `/meters/{id}/__data.json?x-sveltekit-invalidated=001` (decoded) |
 | `GET /api/v1/distribution-transformers` | `/portal/dts` |

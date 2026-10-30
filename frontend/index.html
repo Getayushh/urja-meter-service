@@ -13,7 +13,7 @@
       <button class="nav active" data-view="overview">Meters</button>
       <button class="nav" data-view="transformers">Transformers</button>
     </nav>
-    <p class="side-note">Read-only view over the Urja Meter Ops portal, via this service's API. Live data only; nothing here is sample data.</p>
+    <p class="side-note">Read-only view over the Urja Meter Ops portal, through this service's API. Live data only; nothing here is sample data.</p>
   </aside>
 
   <div class="main">
@@ -23,60 +23,84 @@
     </header>
     <div id="banner" class="banner" hidden></div>
 
+    <!-- ===================== METERS ===================== -->
     <section id="view-overview" class="view">
-      <h1>Meter intelligence</h1>
-      <p class="sub">Search the network, pick a meter, then load its readings.</p>
-      <div class="search"><input id="searchInput" placeholder="Search by meter ID or serial…" maxlength="64"><button id="searchBtn" class="primary">Search</button></div>
+      <h1>Find a meter</h1>
+      <p class="sub">Type a meter ID, serial number or make, then pick a meter from the results.</p>
 
-      <div class="kpis">
-        <div class="kpi"><span>Meters matching</span><b id="kTotal">—</b><small>across all pages</small></div>
-        <div class="kpi"><span>Installed</span><b id="kInstalled">—</b><small>on this page</small></div>
-        <div class="kpi"><span>Faulty or decommissioned</span><b id="kFlagged" class="warn">—</b><small>on this page</small></div>
-        <div class="kpi"><span>Latest kWh register</span><b id="kLatest">—</b><small id="kLatestSub">select a meter and load readings</small></div>
+      <div class="finder card">
+        <div class="search">
+          <input id="searchInput" placeholder="Search by meter ID or serial…" maxlength="64" autocomplete="off"
+                 role="combobox" aria-expanded="true" aria-controls="results">
+          <button id="searchBtn" class="primary">Search</button>
+        </div>
+        <div class="results-head"><span id="resultsMeta" class="sub">Loading meters…</span><span class="hint">↑ ↓ to move, Enter to select</span></div>
+        <div id="meterState" class="state"></div>
+        <ul id="results" class="results" role="listbox" aria-label="Matching meters"></ul>
+        <div class="pager"><button id="prevBtn">Prev</button><span id="pageInfo"></span><button id="nextBtn">Next</button></div>
       </div>
 
-      <div class="grid">
-        <div class="card">
-          <div class="card-head">
-            <div><h2>Energy register</h2><p id="chartSub" class="sub">No meter selected</p></div>
-            <div class="seg" id="range">
-              <button data-h="6">6h</button><button data-h="12">12h</button><button data-h="24" class="on">24h</button><button data-h="0">All</button>
+      <div id="empty" class="empty card">
+        <b>No meter selected</b>
+        <p>Choose one from the list above to see its nameplate, where it sits in the network, its location and its energy readings.</p>
+      </div>
+
+      <div id="workspace" hidden>
+        <div class="ws-head">
+          <div>
+            <h2 id="aTitle" class="ws-title">—</h2>
+            <p class="sub" id="aSub"></p>
+          </div>
+          <div class="ws-actions"><span id="aStatus" class="chip" hidden></span><button id="backBtn">↑ Back to results</button></div>
+        </div>
+
+        <div class="grid">
+          <div class="col">
+            <div class="card">
+              <h3 class="first">Nameplate</h3>
+              <dl id="aDetail" class="detail"></dl>
+              <h3>Location</h3>
+              <div id="geo" class="state">—</div>
+            </div>
+            <div class="card">
+              <h3 class="first">Network position</h3>
+              <div id="hierarchy" class="state">—</div>
             </div>
           </div>
-          <button id="energyBtn" class="primary" disabled>Load energy readings</button>
-          <div id="energyState" class="state"></div>
-          <div class="stats">
-            <div><span>Cumulative kWh</span><b id="sKwh">—</b></div>
-            <div><span>Avg voltR</span><b id="sVolt">—</b></div>
-            <div><span>kWh in window</span><b id="sSpan">—</b></div>
+
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Energy</h2><p id="chartSub" class="sub">No readings loaded</p></div>
+              <div class="seg" id="range">
+                <button data-h="6">6h</button><button data-h="12">12h</button><button data-h="24" class="on">24h</button><button data-h="0">All</button>
+              </div>
+            </div>
+            <div class="row"><button id="energyBtn" class="primary" disabled>Load energy readings</button><span id="energyState" class="state inline"></span></div>
+            <div class="stats">
+              <div><span>Latest kWh register</span><b id="sKwh">—</b></div>
+              <div><span>kWh in window</span><b id="sSpan">—</b></div>
+              <div><span>Peak interval kWh</span><b id="sPeak">—</b></div>
+              <div><span>Avg voltR</span><b id="sVolt">—</b></div>
+            </div>
+            <div class="seg tabs" id="metric">
+              <button data-m="kwh" class="on">Cumulative kWh</button><button data-m="interval">Interval kWh</button><button data-m="volt">voltR</button>
+            </div>
+            <div class="chartbox"><svg id="chart" viewBox="0 0 800 280" role="img" aria-label="Energy chart"></svg></div>
+            <div id="readout" class="readout">Hover the chart for a reading.</div>
+            <details class="tablewrap"><summary>Readings table</summary>
+              <div class="scroll"><table id="readTable"><thead><tr><th>Time</th><th>kWh (cumulative)</th><th>kVAh (cumulative)</th><th>voltR</th><th>Interval kWh</th></tr></thead><tbody></tbody></table></div>
+              <p id="tableNote" class="note"></p>
+            </details>
+            <p class="note">kWh and kVAh are cumulative registers, not consumption. "Interval kWh" is the difference between neighbouring readings. Timestamps have no time zone in the portal data and are shown as received.</p>
           </div>
-          <div class="chartbox"><svg id="chart" viewBox="0 0 800 260" preserveAspectRatio="none" role="img" aria-label="Cumulative kWh over time"></svg></div>
-          <div id="readout" class="readout">Hover the chart for a reading.</div>
-          <p class="note">kWh is a cumulative register, not consumption. Timestamps have no time zone in the portal data; shown as received.</p>
         </div>
-
-        <div class="card">
-          <div class="card-head"><div><h2 id="aTitle">Selected meter</h2><p class="sub" id="aSub">Click a row below</p></div><span id="aStatus" class="chip" hidden></span></div>
-          <dl id="aDetail" class="detail"></dl>
-          <h3>Location</h3>
-          <div id="geo" class="state">—</div>
-          <p id="hierarchy" class="note"></p>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Meters</h2>
-        <div id="meterState" class="state"></div>
-        <div class="scroll"><table id="meterTable" hidden>
-          <thead><tr><th>Meter ID</th><th>Serial</th><th>Make</th><th>Phase</th><th>Status</th><th>Transformer</th></tr></thead><tbody></tbody>
-        </table></div>
-        <div class="pager"><button id="prevBtn">Prev</button><span id="pageInfo"></span><button id="nextBtn">Next</button></div>
       </div>
     </section>
 
+    <!-- ===================== TRANSFORMERS ===================== -->
     <section id="view-transformers" class="view" hidden>
       <h1>Distribution transformers</h1>
-      <p class="sub">Rated capacity only. The portal does not link transformers to meters beyond each meter's transformer code.</p>
+      <p class="sub">Rated capacity only. This is the transformer's rating, not its current load.</p>
       <div class="card">
         <div id="dtState" class="state"></div>
         <div class="scroll"><table id="dtTable" hidden>

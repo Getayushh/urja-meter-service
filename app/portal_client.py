@@ -7,6 +7,7 @@ Responsibilities:
 - Cache successful GET responses briefly.
 """
 
+import logging
 import os
 import time
 
@@ -14,6 +15,7 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+log = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 10
 MAX_ATTEMPTS = 3
@@ -123,12 +125,9 @@ class PortalClient:
         except (AttributeError, TypeError):
             cookie_names = []
 
-        print("Portal login HTTP status:", response.status_code)
-        print(
-            "Portal login content type:",
-            response.headers.get("Content-Type"),
-        )
-        print("Session cookie names:", cookie_names)
+        # Status, content type and cookie NAMES only; never values or credentials.
+        log.debug("Portal login: HTTP %s, %s, cookies=%s", response.status_code,
+                  response.headers.get("Content-Type"), cookie_names)
 
         if response.status_code in (401, 403):
             raise PortalError(
@@ -220,6 +219,16 @@ class PortalClient:
                         "The portal returned invalid JSON."
                     ) from exc
 
+                if isinstance(body, dict) and body.get("type") == "redirect":
+                    # SvelteKit answers a page-data request that needs a login with a redirect node
+                    # (still HTTP 200). Treat it like a 401 and never cache it.
+                    if not relogged and not self._session_injected:
+                        relogged = True
+                        self.logged_in = False
+                        self.login()
+                        continue
+                    raise PortalError("The portal asked us to log in again.", kind="auth")
+
                 self._cache[key] = (
                     time.time() + CACHE_TTL_SECONDS,
                     body,
@@ -308,5 +317,17 @@ class PortalClient:
         )
 
     def get_transformers(self, page=1):
+        # Drop any query string a user may have pasted into the env var; "page" is added below.
         path = os.getenv("PORTAL_DTS_PATH", "/portal/dts").split("?")[0]
         return self.get_json(path, {"page": page})
+
+    def get_meter_page(self, meter_id):
+        """SvelteKit page data for one meter (installation type + network hierarchy).
+
+        The query value mirrors what the portal's own page sends. Passed via params so it
+        is part of the cache key and never duplicated in the path.
+        """
+        return self.get_json(
+            f"/meters/{meter_id}/__data.json",
+            {"x-sveltekit-invalidated": "001"},
+        )

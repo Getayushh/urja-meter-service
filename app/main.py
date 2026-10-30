@@ -38,7 +38,7 @@ class Meter(BaseModel):
     installationStatus: Optional[str] = None
     installationType: Optional[str] = None
     dtCode: Optional[str] = None
-    hierarchy: Optional[list | dict] = None  # only if the portal supplies it (unverified)
+    hierarchy: Optional[list | dict] = None  # always null here: search results lack it; see /meters/{id}/hierarchy
 
 
 class MeterPage(BaseModel):
@@ -46,6 +46,20 @@ class MeterPage(BaseModel):
     total: Optional[int] = None
     page: int
     pageSize: Optional[int] = None
+
+
+class HierarchyLevel(BaseModel):
+    level: str  # zone, circle, division, subdivision, substation, feeder, transformer
+    name: Optional[str] = None
+    code: Optional[str] = None  # e.g. "Z-03"; null if the portal label had no "(code)"
+
+
+class MeterProfile(BaseModel):
+    meterId: str
+    installationStatus: Optional[str] = None
+    installationType: Optional[str] = None  # e.g. "CT Operated"
+    hierarchy: list[HierarchyLevel]  # top of the network down; missing levels are omitted
+    hierarchyComplete: bool  # true only when all 7 levels were present
 
 
 class Reading(BaseModel):
@@ -180,6 +194,18 @@ def meter_geo(meter_id: str = METER_ID, client: PortalClient = Depends(get_clien
     if geo is None:
         return error(404, "geo_unavailable", "No valid coordinates are available for this meter.")
     return {"data": geo}
+
+
+@app.get("/api/v1/meters/{meter_id}/hierarchy", response_model=MeterProfile, responses=ERRORS,
+         summary="Installation type and network hierarchy for ONE meter")
+def meter_hierarchy(meter_id: str = METER_ID, client: PortalClient = Depends(get_client)):
+    """Read from the portal's own meter page data (/meters/{id}/__data.json), which the search results lack."""
+    try:
+        return services.normalize_meter_profile(client.get_meter_page(meter_id), meter_id)
+    except services.MeterNotFound:
+        return error(404, "meter_not_found", f"Meter {meter_id} was not found.")
+    except ValueError:
+        return bad_payload()
 
 
 @app.get("/api/v1/distribution-transformers", response_model=TransformerPage, responses=ERRORS,
