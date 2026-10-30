@@ -105,10 +105,10 @@ python -c "import json; from app.main import app; json.dump(app.openapi(), open(
 
 ## Known limitations
 - The 30 s cache is per process and has no invalidation beyond the TTL; the portal data is static, so staleness hasn't mattered.
-- Session expiry (1 h) is handled by one re-login on 401/403, but I haven't seen what the portal returns on expiry.
+- Sessions last 1 h. A missing, invalid or really expired session returns 401 JSON (all tested live), and the client re-logs in once on 401/403. That re-login was verified with mocks only, not by letting a live session expire inside the service.
 - Two requests that expire at once could each log in. A lock would fix that.
 - No browser-level tests for the dashboard.
-- The first-login 403 was fixed by adding browser-like headers; I didn't isolate which one mattered.
+- Rate-limit thresholds are unknown by choice (the brief says read-only; I did not hammer the portal). The 429 handling is based on the 429s seen early on.
 
 ## With more time
 Inspect `__data.json` for hierarchy and installation type, then build the network explorer. Add a date filter and daily aggregation for energy. Add a small live contract test that I run by hand. Add a login lock and test session expiry. Pull transformer details into the meter response.
